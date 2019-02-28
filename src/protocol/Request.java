@@ -1,29 +1,57 @@
 package protocol;
 
-import core.PaxosMessage;
+import core.Paxos;
 import core.Transaction;
 
 import java.io.Serializable;
 
+import static java.lang.System.exit;
+
 public class Request implements Serializable {
-    private int id;
+    private static int id = 0;
+    private int sender;
     private int type;
     private String message;
     private Transaction transaction = null;
-    private PaxosMessage paxosMessage = null;
+    private Paxos paxos = null;
 
-    public Request(int id, int type, String message, Transaction transaction) {
-        this.id = id;
+
+    // getBalance
+    public Request(int client_id, int type) {
+        this.id = ++id;
+        this.sender = client_id;
         this.type = type;
-        this.message = message;
+    }
+
+    // addTransaction
+    public Request(int client_id, int type, Transaction transaction) {
+        this.id = ++id;
+        this.sender = client_id;
+        this.type = type;
         this.transaction = transaction;
     }
 
-    public Request(int id, int type, String message, PaxosMessage paxosMessage) {
-        this.id = id;
+
+    // Paxos message
+    public Request(int serverID, int type, Paxos paxos) {
+        this.id = ++id;
+        this.sender = serverID;
         this.type = type;
-        this.message = message;
-        this.paxosMessage = paxosMessage;
+        switch (type) {
+            case Protocol.PREPARE:
+                this.paxos = paxos.prepareMessage();
+                break;
+            case Protocol.PROPOSE:
+                this.paxos.proposeMessage();
+                break;
+            case Protocol.DECIDE:
+                this.paxos.decideMessage();
+                break;
+            default:
+                System.out.println("Wrong Paxos message !");
+                exit(0);
+        }
+
     }
 
     public int getId() {
@@ -32,6 +60,14 @@ public class Request implements Serializable {
 
     public void setId(int id) {
         this.id = id;
+    }
+
+    public int getSender() {
+        return sender;
+    }
+
+    public void setSender(int sender) {
+        this.sender = sender;
     }
 
     public int getType() {
@@ -58,11 +94,11 @@ public class Request implements Serializable {
         this.transaction = transaction;
     }
 
-    public PaxosMessage getPaxosMessage() {
-        return paxosMessage;
+    public Paxos getPaxos() {
+        return paxos;
     }
 
-    public void setPaxosMessage(PaxosMessage paxosMessage) {
-        this.paxosMessage = paxosMessage;
+    public void setPaxos(Paxos paxos) {
+        this.paxos = paxos;
     }
 }
