@@ -1,5 +1,6 @@
 package protocol;
 
+import core.Host;
 import core.Paxos;
 import core.Transaction;
 
@@ -20,52 +21,44 @@ public class Protocol {
     public static final int SEND_BALANCE_ERROR = 101;
     public static final int SEND_TRANSACTION_STATUS_ERROR = 102;
 
-    // ------------------------------ Request messages ------------------------
+    // ------------------------------ Client messages ------------------------
 
-    /*
-        get client balance
-    */
-    public static Request getBalance(int clientId) {
-        return new Request(clientId, GET_BALANCE);
+    public static Request getBalance(Host sender) {
+        return new Request(sender, GET_BALANCE);
     }
 
-    /*
-        execute a transaction
-    */
-    public static Request addTransaction(int client_id, Transaction transaction) {
-        return new Request(client_id, ADD_TRANSACTION, transaction);
+    public static Request addTransaction(Host sender, Transaction transaction) {
+        return new Request(sender, ADD_TRANSACTION, transaction);
     }
 
-    // ------------------------------ Response messages -----------------------
+    // ------------------------------ Server messages -------------------------
 
-    /*
-    get client balance
-    */
-    public static Response sendBalance(int requestID, int senderID, String message) {
-
-        return new Response(SEND_BALANCE, requestID, senderID, message);
+    public static Response sendBalance(int requestId, Host sender, String message) {
+        return new Response(SEND_BALANCE, requestId, sender, message);
     }
 
     // ------------------------------ Paxos Request messages ------------------
-    public static Request sendPrepare(int senderID, Paxos paxos) {
-        return new Request(senderID, Protocol.PREPARE, paxos);
+
+    public static Request sendPrepare(Host sender, Paxos paxos) {
+        return new Request(sender, Protocol.PREPARE, paxos);
     }
 
-    public static Request sendPropose(int senderID, Paxos paxos) {
-        return new Request(senderID, Protocol.PROPOSE, paxos);
+    public static Request sendPropose(Host sender, Paxos paxos) {
+        return new Request(sender, Protocol.PROPOSE, paxos);
     }
 
-    public static Request sendDecide(int senderID, Paxos paxos) {
-        return new Request(senderID, Protocol.DECIDE, paxos);
+    public static Request sendDecide(Host sender, Paxos paxos) {
+        return new Request(sender, Protocol.DECIDE, paxos);
     }
 
     // ------------------------------ Paxos Response messages ------------------
-    public static Response sendAck(int requestID, int senderID, Paxos paxos) {
-        return new Response(ACK, requestID, senderID, paxos);
+
+    public static Response sendAck(int requestId, Host sender, Paxos paxos) {
+        return new Response(ACK, requestId, sender, paxos);
     }
 
-    public static Response sendAccept(int requestID, int senderID, Paxos paxos) {
-        return new Response(PROPOSE, requestID, senderID, paxos);
+    public static Response sendAccept(int requestId, Host sender, Paxos paxos) {
+        return new Response(ACCEPT, requestId, sender, paxos);
     }
 }
 

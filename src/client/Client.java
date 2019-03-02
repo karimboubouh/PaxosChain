@@ -1,5 +1,7 @@
 package client;
 
+import core.Global;
+import core.Host;
 import core.Transaction;
 import protocol.Protocol;
 import protocol.Request;
@@ -9,6 +11,7 @@ import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -16,35 +19,28 @@ import java.util.Scanner;
 
 public class Client {
 
-    // Client global variables
-    public static final int CLIENT_ID = 1;
-    public static String CLIENT_HOST = "localhost";
-    public static int CLIENT_PORT = 9065;
-
+    // client identity
+    private Host host;
     // estimated leader identity
-    private List<Integer> leader = null;
-
+    private Host leader = null;
+    // list of known servers
+    private List<Host> knownServers;
     // Communication socket
-    private List<List<Integer>> knwonServers;
     private DatagramSocket udpSocket;
-
-    // client attributes
+    // client transaction
     private Transaction transaction;
 
-
-    public Client() throws IOException {
+    public Client(Host host) throws IOException {
+        this.host = host;
         init();
         start();
+        ReceiverThread receiver = new ReceiverThread(this);
+        receiver.start();
     }
 
     private void init() throws IOException {
-        // init DatagramSocket
-        this.udpSocket = new DatagramSocket(CLIENT_PORT, InetAddress.getByName(CLIENT_HOST));
-        this.knwonServers = new ArrayList<>();
-        this.knwonServers.add(Arrays.asList(1, 7501));
-        this.knwonServers.add(Arrays.asList(2, 7502));
-        this.knwonServers.add(Arrays.asList(3, 7503));
-        // init client info
+        this.udpSocket = new DatagramSocket(host.getPort(), host.getAddress());
+        this.knownServers = Global.servers();
     }
 
     private void start() throws IOException {
@@ -52,11 +48,11 @@ public class Client {
         while (true) {
             Runtime.getRuntime().exec("clear");
             Scanner sc = new Scanner(System.in);
-            System.out.println("\n-------------------- Client ID : " + CLIENT_ID + " --------------------");
+            System.out.println("\n-------------------- Client ID : " + host.getId() + " --------------------");
             System.out.println("* Check your wallet : 1");
             System.out.println("* Add a transaction : 2");
             System.out.println("* Terminate program : q");
-            System.out.println(">> Choose an operation : ");
+            System.out.print(">> Choose an operation : ");
             String op = sc.nextLine().trim();
             switch (op) {
                 case "1":
@@ -78,22 +74,22 @@ public class Client {
         // Request client balance
         System.out.println("Requesting balance ...");
         if(leader != null){
-            sendRequest(Protocol.getBalance(CLIENT_ID), leader);
+            sendRequest(Protocol.getBalance(host), leader);
         }else{
-            sendRequest(Protocol.getBalance(CLIENT_ID), this.knwonServers.get(0));
+            sendRequest(Protocol.getBalance(host), this.knownServers.get(0));
         }
     }
 
     private void doTransaction() {
         Scanner sc = new Scanner(System.in);
-        System.out.println("Set your transaction in the format <Sender Receiver Amount> :");
+        System.out.print("Set your transaction in the format <Sender Receiver Amount> : ");
         try {
             String[] tr = sc.nextLine().trim().split(" ");
-            int sender_id = Integer.parseInt(tr[0]);
-            int receiver_id = Integer.parseInt(tr[1]);
+            int senderId = Integer.parseInt(tr[0]);
+            int receiverId = Integer.parseInt(tr[1]);
             float amount = Float.parseFloat(tr[2]);
-            if (sender_id != CLIENT_ID) throw new Exception();
-            Request request = Protocol.addTransaction(CLIENT_ID, new Transaction(sender_id, receiver_id, amount));
+            if (senderId != host.getId()) throw new Exception();
+            Request request = Protocol.addTransaction(host, new Transaction(senderId, receiverId, amount));
             if (leader != null) {
                 sendRequest(request, leader);
             } else {
@@ -109,11 +105,12 @@ public class Client {
 
     private void stop() {
         System.out.println("Client exiting ...");
+        System.exit(0);
     }
 
     @Override
     public String toString() {
-        return "Client{" + CLIENT_ID + "}";
+        return "Client{" + host.getId() + ", " + host.getPort() + "}";
     }
 
     private byte[] objectToByte(Object o) throws IOException {
@@ -131,16 +128,17 @@ public class Client {
         return o;
     }
 
-    private void sendRequest(Request request, List<Integer> server) throws IOException {
+    private void sendRequest(Request request, Host server) throws IOException {
         // Send client requests
         byte[] buf = objectToByte(request);
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, InetAddress.getByName("localhost"), server.get(1));
+        DatagramPacket packet = new DatagramPacket(buf, buf.length, server.getAddress(), server.getPort());
         udpSocket.send(packet);
-        System.out.println("Request " + request.getType() + " has been sent ...");
+        System.out.println("Request sent to " + server + " ...");
     }
 
     private void broadcast(Request request) throws IOException {
-        for (List<Integer> server : this.knwonServers) {
+        System.out.println("Boadcasting request to all servers ...");
+        for (Host server : this.knownServers) {
             sendRequest(request, server);
         }
     }
@@ -183,9 +181,12 @@ public class Client {
                 }
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
-            } catch (Exception e) {
-                e.printStackTrace();
             }
         }
+    }
+
+    public static void main(String[] args) throws IOException {
+        int id = Integer.parseInt(args[0]);
+        new Client(Global.clients().get(id-1));
     }
 }

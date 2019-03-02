@@ -1,42 +1,39 @@
 package server;
 
-import core.Block;
-import core.Paxos;
-import core.Transaction;
+import client.Client;
+import core.*;
 import protocol.Protocol;
 import protocol.Request;
 
 import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Server {
-    // Server global variables
-    public static final int SERVER_ID = 1;
-    public static String SERVER_HOST = "localhost";
-    public static int SERVER_PORT = 8865;
-    public static int MAJORITY = 2;
-
+    // server identity
+    private Host host;
     // Communication socket
-    private List<List<Integer>> knwonServers;
+    private List<Host> servers;
     private DatagramSocket udpSocket;
     private List<ServerHandler> workers;
 
     // server attributes
-    private List<Integer> leader = null;
-    private Blockchain blockchain;
+    private Host leader = null;
+    private int majority;
+    private BlockChain BlockChain;
     private Paxos paxos;
     private List<Transaction> transactions;
     private Map<Integer, Float> balances = new HashMap<>();
 
     // Paxos attributes
-    private Map<int[], List<Paxos>> acks;
+    private ConcurrentHashMap<int[], List<Paxos>> acks;
     private Map<int[], List<Paxos>> accepts;
 
 
-    public Server() throws IOException, ClassNotFoundException {
+    public Server(Host host) throws IOException, ClassNotFoundException {
+        this.host = host;
         init();
         start();
     }
@@ -58,25 +55,22 @@ public class Server {
 
     private void init() throws IOException {
         // init DatagramSocket
-        this.knwonServers = new ArrayList<>();
-        this.knwonServers.add(Arrays.asList(1, 7501));
-        this.knwonServers.add(Arrays.asList(2, 7502));
-        this.knwonServers.add(Arrays.asList(3, 7503));
-        MAJORITY = this.knwonServers.size();
-        this.udpSocket = new DatagramSocket(SERVER_PORT, InetAddress.getByName(SERVER_HOST));
+        this.servers = Global.servers();
+        this.majority = this.servers.size() / 2 + 1;
+        this.udpSocket = new DatagramSocket(host.getPort(), host.getAddress());
         this.workers = new ArrayList<>();
 
         // init server info
-        this.blockchain = new Blockchain();
-        this.paxos = new Paxos(SERVER_ID);
+        this.BlockChain = new BlockChain();
+        this.paxos = new Paxos(host);
         this.transactions = new ArrayList<>();
         this.balances = new HashMap<>();
 
         // init paxos attributes
-        this.acks = new HashMap<>();
+        this.acks = new ConcurrentHashMap<>();
         this.accepts = new HashMap<>();
 
-        // user balances
+        // tmp user balances
         balances.put(1, 100f);
         balances.put(2, 200f);
         balances.put(3, 150f);
@@ -84,18 +78,20 @@ public class Server {
     }
 
     public void start() throws IOException, ClassNotFoundException {
-        System.out.println(" server started");
+        System.out.println("Server started\nWaiting for requests ...");
         while (true) {
             byte[] buf = new byte[2048];
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
             udpSocket.receive(packet);
-            Object message = (Object) byteToObject(packet.getData());
-            workers.add(new ServerHandler(this, message, packet.getAddress(), packet.getPort()));
+            Object message = byteToObject(packet.getData());
+            ServerHandler serverHandler = new ServerHandler(this, message, packet.getAddress(), packet.getPort());
+            serverHandler.start();
+            workers.add(serverHandler);
         }
     }
 
-    public Float getUserBalance(int userId) {
-        return balances.get(userId);
+    public Float getUserBalance(Host user) {
+        return balances.get(user.getId());
     }
 
     public Map<Integer, Float> getBalances() {
@@ -114,11 +110,83 @@ public class Server {
         balances.put(receiverID, balances.get(receiverID) + amount);
     }
 
-    public List<Integer> getLeader() {
+    /*
+     * Paxos receive ACK : receive ack messages and add them to a buffer.
+     * Once you have a majority of acks check for the val of the highest
+     * ballot number and retrive its value or use client value.
+     * Then send Accept message to all
+     */
+    public void newAck(Paxos receivedPaxos) throws IOException {
+//        int[] b = receivedPaxos.getBallotNum();
+        int[] b = this.paxos.getBallotNum();
+        Block val = this.paxos.getClientVal();
+        if (acks.containsKey(b)) {
+            acks.get(b).add(receivedPaxos);
+        } else {
+            List<Paxos> p = new ArrayList<>();
+            p.add(receivedPaxos);
+            acks.put(b, p);
+        }
+        System.out.println("i'm here ...");
+        System.out.println(acks);
+        System.out.println("> " + acks.size() + " ACK : " + acks.get(b).size() + "(" + b[0] + ", " + b[1] + ") | Majority : " + majority);
+
+
+        if (acks.get(b).size() >= majority) {
+            System.out.println("MASAKAAA");
+            // to check
+            int[] ballot = this.paxos.getBallotNum();
+            for (Paxos pax : acks.get(b)) {
+                if (pax.compareAcceptNum(ballot)) {
+                    ballot = pax.getAcceptNum();
+                    if (pax.getAcceptVal() != null) {
+                        val = pax.getAcceptVal();
+                    }
+                }
+            }
+            this.paxos.setClientVal(val);
+            Request request = Protocol.sendPropose(host, this.paxos);
+            broadcastRequest(request);
+        }
+    }
+
+    public void newAccept(Paxos receivedPaxos) throws IOException {
+        int[] b = receivedPaxos.getBallotNum();
+        if (accepts.containsKey(b)) {
+            accepts.get(b).add(receivedPaxos);
+        } else {
+            List<Paxos> p = new ArrayList<>();
+            p.add(receivedPaxos);
+            accepts.put(b, p);
+        }
+        if (accepts.get(b).size() >= majority) {
+            Request request = Protocol.sendDecide(host, this.paxos);
+            broadcastRequest(request);
+        }
+    }
+
+
+    public void broadcastRequest(Request request) throws IOException {
+        System.out.println("Broadcast Request " + request.getType() + " to all ...");
+        for (Host s : this.servers) {
+            sendRequest(request, s);
+        }
+    }
+
+    public void sendRequest(Request request, Host server) throws IOException {
+        // Send client requests
+        byte[] buf = objectToByte(request);
+        DatagramPacket packet = new DatagramPacket(buf, buf.length, server.getAddress(), server.getPort());
+        udpSocket.send(packet);
+        System.out.println("Request " + request.getType() + " has been sent to " + server + " ...");
+    }
+
+
+    public Host getLeader() {
         return leader;
     }
 
-    public void setLeader(List<Integer> leader) {
+    public void setLeader(Host leader) {
         this.leader = leader;
     }
 
@@ -138,68 +206,24 @@ public class Server {
         this.transactions = transactions;
     }
 
-
-    /*
-     * Paxos receive ACK : receive ack messages and add them to a buffer.
-     * Once you have a majority of acks check for the val of the highest
-     * ballot number and retrive its value or use client value.
-     * Then send Accept message to all
-     */
-    public void newAck(Paxos receivedPaxos) throws IOException {
-        int[] b = receivedPaxos.getBallotNum();
-        Block val = this.paxos.getClientVal();
-        if (acks.containsKey(b)) {
-            acks.get(b).add(receivedPaxos);
-        } else {
-            List<Paxos> p = new ArrayList<>();
-            p.add(receivedPaxos);
-            acks.put(b, p);
-        }
-        if (acks.get(b).size() >= MAJORITY) {
-            // to check
-            int[] ballot = this.paxos.getBallotNum();
-            for (Paxos pax : acks.get(b)) {
-                if (pax.compareAcceptNum(ballot)) {
-                    ballot = pax.getAcceptNum();
-                    if (pax.getAcceptVal() != null) {
-                        val = pax.getAcceptVal();
-                    }
-                }
-            }
-            this.paxos.setClientVal(val);
-            Request request = Protocol.sendPropose(SERVER_ID, this.paxos);
-            broadcastRequest(request);
-        }
+    public Host getHost() {
+        return host;
     }
 
-    public void newAccept(Paxos receivedPaxos) throws IOException {
-        int[] b = receivedPaxos.getBallotNum();
-        if (accepts.containsKey(b)) {
-            accepts.get(b).add(receivedPaxos);
-        } else {
-            List<Paxos> p = new ArrayList<>();
-            p.add(receivedPaxos);
-            accepts.put(b, p);
-        }
-        if (accepts.get(b).size() >= MAJORITY) {
-            Request request = Protocol.sendDecide(SERVER_ID, this.paxos);
-            broadcastRequest(request);
-        }
+    public void setHost(Host host) {
+        this.host = host;
     }
 
-
-    public void broadcastRequest(Request request) throws IOException {
-        for (List<Integer> s : this.knwonServers) {
-            sendRequest(request, s);
-        }
+    public BlockChain getBlockChain() {
+        return BlockChain;
     }
 
-    public void sendRequest(Request request, List<Integer> server) throws IOException {
-        // Send client requests
-        byte[] buf = objectToByte(request);
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, InetAddress.getByName(SERVER_HOST), server.get(1));
-        udpSocket.send(packet);
-        System.out.println("Request " + request.getType() + " has been broadcasted to all ...");
+    public void setBlockChain(BlockChain BlockChain) {
+        this.BlockChain = BlockChain;
     }
 
+    public static void main(String[] args) throws IOException, ClassNotFoundException {
+        int id = Integer.parseInt(args[0]);
+        new Server(Global.servers().get(id-1));
+    }
 }

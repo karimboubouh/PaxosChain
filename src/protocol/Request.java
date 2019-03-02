@@ -1,5 +1,6 @@
 package protocol;
 
+import core.Host;
 import core.Paxos;
 import core.Transaction;
 
@@ -9,7 +10,7 @@ import static java.lang.System.exit;
 
 public class Request implements Serializable {
     private static int id = 0;
-    private int sender;
+    private Host sender;
     private int type;
     private String message;
     private Transaction transaction = null;
@@ -17,25 +18,25 @@ public class Request implements Serializable {
 
 
     // getBalance
-    public Request(int client_id, int type) {
+    public Request(Host sender, int type) {
         this.id = ++id;
-        this.sender = client_id;
+        this.sender = sender;
         this.type = type;
     }
 
     // addTransaction
-    public Request(int client_id, int type, Transaction transaction) {
+    public Request(Host sender, int type, Transaction transaction) {
         this.id = ++id;
-        this.sender = client_id;
+        this.sender = sender;
         this.type = type;
         this.transaction = transaction;
     }
 
 
     // Paxos message
-    public Request(int serverID, int type, Paxos paxos) {
+    public Request(Host sender, int type, Paxos paxos) {
         this.id = ++id;
-        this.sender = serverID;
+        this.sender = sender;
         this.type = type;
         switch (type) {
             case Protocol.PREPARE:
@@ -54,21 +55,13 @@ public class Request implements Serializable {
 
     }
 
-    public int getId() {
-        return id;
-    }
+    public int getId() { return id; }
 
-    public void setId(int id) {
-        this.id = id;
-    }
+    public void setId(int id) { this.id = id; }
 
-    public int getSender() {
-        return sender;
-    }
+    public Host getSender() { return sender; }
 
-    public void setSender(int sender) {
-        this.sender = sender;
-    }
+    public void setSender(Host sender) { this.sender = sender; }
 
     public int getType() {
         return type;

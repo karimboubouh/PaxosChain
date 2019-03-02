@@ -1,5 +1,6 @@
 package protocol;
 
+import core.Host;
 import core.Paxos;
 import core.Transaction;
 
@@ -9,53 +10,35 @@ import static java.lang.System.exit;
 
 public class Response implements Serializable {
     private static int id = 0;
-    private int requestID;
+    private int requestId;
     private int type;
     private int status;
-    private int senderID;
+    private Host sender;
     private String message;
     private Transaction transaction = null;
     private Paxos paxos = null;
 
     // send balance
-    public Response(int type, int requestID, int senderID, String message) {
+    public Response(int type, int requestId, Host sender, String message) {
         this.id = ++id;
-        this.requestID = requestID;
+        this.requestId = requestId;
         this.type = type;
-        this.senderID = senderID;
+        this.sender = sender;
         this.message = message;
-    }
-
-    public Response(int id, int type, int status, int senderID, String message, Paxos paxos) {
-        this.id = id;
-        this.type = type;
-        this.status = status;
-        this.senderID = senderID;
-        this.message = message;
-        this.paxos = paxos;
-    }
-
-    public Response(int id, int type, int status, int senderID, String message, Transaction transaction) {
-        this.id = id;
-        this.type = type;
-        this.status = status;
-        this.senderID = senderID;
-        this.message = message;
-        this.transaction = transaction;
     }
 
     // Paxos message
-    public Response(int senderID, int requestID, int type, Paxos paxos) {
+    public Response(int type, int requestId, Host sender, Paxos paxos) {
         this.id = ++id;
-        this.requestID = requestID;
-        this.senderID = senderID;
+        this.requestId = requestId;
+        this.sender = sender;
         this.type = type;
         switch (type) {
             case Protocol.ACK:
-                this.paxos.ackMessage();
+                this.paxos = paxos.ackMessage();
                 break;
             case Protocol.ACCEPT:
-                this.paxos.acceptMessage();
+                this.paxos = paxos.acceptMessage();
                 break;
             default:
                 System.out.println("Wrong Paxos message !");
@@ -87,13 +70,9 @@ public class Response implements Serializable {
         this.status = status;
     }
 
-    public int getsenderID() {
-        return senderID;
-    }
+    public Host getSender() { return sender; }
 
-    public void setsenderID(int senderID) {
-        this.senderID = senderID;
-    }
+    public void setSender(Host sender) { this.sender = sender; }
 
     public String getMessage() {
         return message;

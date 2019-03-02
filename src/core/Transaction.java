@@ -37,4 +37,8 @@ public class Transaction implements Serializable {
         this.amount = amount;
     }
 
+    @Override
+    public String toString() {
+        return senderId + " " + receiverId + " " + amount;
+    }
 }

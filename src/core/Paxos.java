@@ -1,6 +1,7 @@
 package core;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 public class Paxos implements Serializable {
     private int[] ballotNum;
@@ -12,8 +13,8 @@ public class Paxos implements Serializable {
         this.ballotNum = ballotNum;
     }
 
-    public Paxos(int serverID) {
-        this.ballotNum = new int[]{0, serverID};
+    public Paxos(Host server) {
+        this.ballotNum = new int[]{0, server.getId()};
         acceptNum = new int[]{0, 0};
         acceptVal = null;
     }
@@ -26,6 +27,7 @@ public class Paxos implements Serializable {
     }
 
     public Paxos prepareMessage() {
+        this.ballotNum[0]++;
         return new Paxos(this.ballotNum, null, null, null);
     }
 
@@ -44,8 +46,6 @@ public class Paxos implements Serializable {
     public Paxos decideMessage() {
         return new Paxos(this.ballotNum, null, null, clientVal);
     }
-
-    public int doElection() { return 0; }
 
     public boolean checkBallotNumber(int[] b) {
         if (this.ballotNum[0] == b[0]) {
@@ -95,5 +95,10 @@ public class Paxos implements Serializable {
 
     public void setClientVal(Block clientVal) {
         this.clientVal = clientVal;
+    }
+
+    @Override
+    public String toString() {
+        return "Paxos{" + Arrays.toString(ballotNum) + '}';
     }
 }

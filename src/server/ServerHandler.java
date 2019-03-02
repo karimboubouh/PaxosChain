@@ -1,6 +1,7 @@
 package server;
 
 import core.Block;
+import core.Host;
 import core.Paxos;
 import core.Transaction;
 import protocol.Protocol;
@@ -13,8 +14,8 @@ import java.io.ObjectOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.ArrayList;
 
-import static server.Server.SERVER_ID;
 import static server.Server.objectToByte;
 
 public class ServerHandler extends Thread {
@@ -51,8 +52,10 @@ public class ServerHandler extends Thread {
     @Override
     public void run() {
         if (this.messageType == 1) {
+            System.out.println("Request received!");
             handleRequest();
         } else if (this.messageType == 2) {
+            System.out.println("Response received!");
             handleResponse();
         }
     }
@@ -64,8 +67,9 @@ public class ServerHandler extends Thread {
                     sendBalance();
                     break;
                 case Protocol.ADD_TRANSACTION:
+                    server.getTransactions().add(request.getTransaction());
                     doElectionIfDeeded();
-                    //doTransaction(request);
+                    doTransaction();
                     break;
                 case Protocol.PREPARE:
                     doPrepare();
@@ -73,7 +77,9 @@ public class ServerHandler extends Thread {
                 case Protocol.PROPOSE:
                     doPropose();
                     break;
-                    // decide
+                case Protocol.DECIDE:
+                    doDecide();
+                    break;
                 default:
                     System.out.println("we can't handle this type of request");
             }
@@ -91,9 +97,6 @@ public class ServerHandler extends Thread {
                 case Protocol.ACCEPT:
                     doAccept();
                     break;
-                case Protocol.DECIDE:
-                    doDecide();
-                    break;
                 default:
                     System.out.println("we can't handle this type of response");
             }
@@ -106,20 +109,10 @@ public class ServerHandler extends Thread {
     private void doElectionIfDeeded() throws IOException {
         if (server.getLeader() == null) {
             // No leader yet
-            server.getPaxos().doElection();
-            Paxos paxos = server.getPaxos();
-        }else{
-            if (this.server.SERVER_ID == server.getLeader().get(0)){
-                // i'm the leader
-                // TODO Mine block using request.getTransaction()
-                Block block = new Block();
-                this.server.getPaxos().setClientVal(block);
-                Request request = Protocol.sendPropose(SERVER_ID, this.server.getPaxos());
+            if(server.getTransactions().size() == 2){
+                Paxos paxos = server.getPaxos();
+                Request request = Protocol.sendPrepare(this.server.getHost(), this.server.getPaxos());
                 this.server.broadcastRequest(request);
-            }else{
-                // transfer the request to the leader
-                this.server.sendRequest(request, this.server.getLeader());
-                // TODO notify the client of the leader id
             }
         }
     }
@@ -129,8 +122,8 @@ public class ServerHandler extends Thread {
         if (!server.getPaxos().checkBallotNumber(ballot)) {
             server.getPaxos().setBallotNum(ballot);
         }
-        Response response = Protocol.sendAck(request.getId(), server.SERVER_ID, server.getPaxos());
-        sendResponse(response);
+        Response response = Protocol.sendAck(request.getId(), server.getHost(), server.getPaxos());
+        sendResponse(response, request.getSender());
     }
 
     private void doAck() throws IOException {
@@ -141,8 +134,8 @@ public class ServerHandler extends Thread {
         if (this.server.getPaxos().checkBallotNumber(this.request.getPaxos().getBallotNum())) {
             this.server.getPaxos().setAcceptNum(this.request.getPaxos().getBallotNum());
             this.server.getPaxos().setClientVal(this.request.getPaxos().getClientVal());
-            Response response = Protocol.sendAccept(request.getId(), server.SERVER_ID, server.getPaxos());
-            sendResponse(response);
+            Response response = Protocol.sendAccept(request.getId(), server.getHost(), server.getPaxos());
+            sendResponse(response, request.getSender());
         }
     }
 
@@ -151,38 +144,40 @@ public class ServerHandler extends Thread {
     }
 
     private void doDecide() {
-        // add Block to blockchain
+        // TODO add Block to blockchain
+        this.server.getBlockChain().addBlock(this.server.getPaxos().getAcceptVal());
     }
 
     private void sendBalance() throws IOException {
-        // Check if request already executed and inform client with it status
+        // TODO Check if request already executed and inform client with it status
         String message = "Your balance is " + server.getUserBalance(this.request.getSender()) + "DH.";
-        Response response = Protocol.sendBalance(this.request.getId(), SERVER_ID, message);
-        sendResponse(response);
+        Response response = Protocol.sendBalance(this.request.getId(), this.server.getHost(), message);
+        sendResponse(response, request.getSender());
     }
 
-    private void doTransaction(Request request) {
-        // create new block if buffer full (2tr)
-        Block currentBlock = Blockchain.MineBlock(server.getTransactions());
-        Block agreedBlock = server.getPaxos().agreeOnBlock(currentBlock);
-        // update balance
-        server.updateBalance(request.getTransaction());
+    private void doTransaction() throws IOException {
+        // do propose the value if server is leader
+        if (server.getLeader() != null && this.server.getHost().getId() == server.getLeader().getId()){
+            // i'm the leader
+            if(server.getTransactions().size() == 2) {
+                Block block = this.server.getBlockChain().newBlock(this.server.getTransactions());
+                this.server.getPaxos().setClientVal(block);
+                Request request = Protocol.sendPropose(this.server.getHost(), this.server.getPaxos());
+                this.server.broadcastRequest(request);
+                server.setTransactions(new ArrayList<>());
+            }
+        }else{
+            // transfer the request to the leader
+            //this.server.sendRequest(request, this.server.getLeader());
+            // TODO notify the client of the leader id
+        }
     }
 
-    private void sendResponse(Response response) throws IOException {
+    private void sendResponse(Response response, Host receiver) throws IOException {
         // Send server responses
         byte[] buf = objectToByte(response);
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, this.address, this.port);
+        DatagramPacket packet = new DatagramPacket(buf, buf.length, receiver.getAddress(), receiver.getPort());
         server.sendPacket(packet);
         System.out.println("Response " + response.getType() + " has been sent ...");
     }
-
-    private void broadcast(Response response) throws IOException {
-        // Send server responses
-        byte[] buf = objectToByte(response);
-        DatagramPacket packet = new DatagramPacket(buf, buf.length, this.address, this.port);
-        server.sendPacket(packet);
-        System.out.println("Response " + response.getType() + " has been sent ...");
-    }
-
 }
