@@ -49,9 +49,9 @@ public class Paxos implements Serializable {
 
     public boolean checkBallotNumber(int[] b) {
         if (this.ballotNum[0] == b[0]) {
-            return this.ballotNum[1] > b[1];
+            return this.ballotNum[1] <= b[1];
         }
-        return this.ballotNum[0] > b[0];
+        return this.ballotNum[0] <= b[0];
     }
 
     public boolean compareAcceptNum(int[] a) {

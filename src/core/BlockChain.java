@@ -22,7 +22,7 @@ public class BlockChain {
         do {
             nonce = getSaltString();
             hash = Block.calculateHash(transaction + nonce);
-            System.out.println(hash);
+//            System.out.println(hash);
         } while (!hash.endsWith("0") && !hash.endsWith("1") && !hash.endsWith("2"));
         return nonce;
     }
@@ -51,13 +51,16 @@ public class BlockChain {
     }
 
     public static String getPreviousHeaer(List<Block> blockckain) {
+        if(blockckain.size() > 0){
+            int term = blockckain.get(blockckain.size() - 1).getTerm();
+            String previousHashHeader = blockckain.get(blockckain.size() - 1).getPreviousHashHeader();
+            String transactionHash = blockckain.get(blockckain.size() - 1).getTransactionHash();
+            String nonce = blockckain.get(blockckain.size() - 1).getNonce();
 
-        int term = blockckain.get(blockckain.size() - 1).getTerm();
-        String previousHashHeader = blockckain.get(blockckain.size() - 1).getPreviousHashHeader();
-        String transactionHash = blockckain.get(blockckain.size() - 1).getTransactionHash();
-        String nonce = blockckain.get(blockckain.size() - 1).getNonce();
-
-        return term + previousHashHeader + transactionHash + nonce;
+            return term + previousHashHeader + transactionHash + nonce;
+        }else {
+            return "0";
+        }
 
     }
 

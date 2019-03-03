@@ -34,19 +34,37 @@ public class Client {
         this.host = host;
         init();
         start();
-        ReceiverThread receiver = new ReceiverThread(this);
-        receiver.start();
+
     }
 
     private void init() throws IOException {
         this.udpSocket = new DatagramSocket(host.getPort(), host.getAddress());
         this.knownServers = Global.servers();
+        ReceiverThread receiver = new ReceiverThread(this);
+        receiver.start();
     }
 
     private void start() throws IOException {
         // start a transaction request ...
+        while(true){
+            System.out.println("Press Enter to send 2 transactions");
+            System.in.read();
+            Request req1 = Protocol.addTransaction(host, new Transaction(1, 2, 140));
+            Request req2 = Protocol.addTransaction(host, new Transaction(1, 2, 20));
+            if (leader != null) {
+                sendRequest(req1, leader);
+                sendRequest(req2, leader);
+            } else {
+                broadcast(req1);
+                broadcast(req2);
+            }
+            System.in.read();
+        }
+        /*
         while (true) {
             Runtime.getRuntime().exec("clear");
+            System.out.print("\033[H\033[2J");
+            System.out.flush();
             Scanner sc = new Scanner(System.in);
             System.out.println("\n-------------------- Client ID : " + host.getId() + " --------------------");
             System.out.println("* Check your wallet : 1");
@@ -67,7 +85,9 @@ public class Client {
                 default:
                     System.out.println("Please choose a valid option");
             }
+            System.in.read();
         }
+        */
     }
 
     private void getBalance() throws IOException {
@@ -163,7 +183,7 @@ public class Client {
 
                     switch (response.getType()) {
                         case Protocol.SEND_BALANCE:
-                            System.out.println("Your balance is : " + response.getMessage() + ".");
+                            System.out.println(response.getMessage());
                             break;
                         case Protocol.SEND_BALANCE_ERROR:
                             System.out.println("We couldn't retrieve your balance : " + response.getMessage() + "!");

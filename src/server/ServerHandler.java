@@ -1,9 +1,7 @@
 package server;
 
-import core.Block;
-import core.Host;
-import core.Paxos;
-import core.Transaction;
+import com.google.gson.GsonBuilder;
+import core.*;
 import protocol.Protocol;
 import protocol.Request;
 import protocol.Response;
@@ -52,10 +50,11 @@ public class ServerHandler extends Thread {
     @Override
     public void run() {
         if (this.messageType == 1) {
-            System.out.println("Request received!");
+            System.out.println("Request " + Global.type(request.getType()) + " received from "+request.getSender()+"!");
             handleRequest();
         } else if (this.messageType == 2) {
-            System.out.println("Response received!");
+            int[] b = response.getPaxos().getBallotNum();
+            System.out.println("Response " + Global.type(response.getType()) + " received! (" + b[0] + ", " + b[1] + ") " + port);
             handleResponse();
         }
     }
@@ -119,11 +118,11 @@ public class ServerHandler extends Thread {
 
     private void doPrepare() throws IOException {
         int[] ballot = request.getPaxos().getBallotNum();
-        if (!server.getPaxos().checkBallotNumber(ballot)) {
+        if (server.getPaxos().checkBallotNumber(ballot)) {
             server.getPaxos().setBallotNum(ballot);
+            Response response = Protocol.sendAck(request.getId(), server.getHost(), server.getPaxos());
+            sendResponse(response, request.getSender());
         }
-        Response response = Protocol.sendAck(request.getId(), server.getHost(), server.getPaxos());
-        sendResponse(response, request.getSender());
     }
 
     private void doAck() throws IOException {
@@ -132,20 +131,31 @@ public class ServerHandler extends Thread {
 
     private void doPropose() throws IOException {
         if (this.server.getPaxos().checkBallotNumber(this.request.getPaxos().getBallotNum())) {
+            System.out.println("the actual paxos: "+this.server.getPaxos().getBallotNum()[1]+" received paxos: "+this.request.getPaxos().getBallotNum()[1] + " >>>>>>>" + Thread.currentThread().getName());
             this.server.getPaxos().setAcceptNum(this.request.getPaxos().getBallotNum());
-            this.server.getPaxos().setClientVal(this.request.getPaxos().getClientVal());
+            this.server.getPaxos().setBallotNum(this.request.getPaxos().getBallotNum());
+            this.server.getPaxos().setAcceptVal(this.request.getPaxos().getClientVal());
+            String recB = request.getSender().getId()+"/"+server.getHost().getId()+"(" + request.getPaxos().getBallotNum()[0] + ", " + request.getPaxos().getBallotNum()[1] + ")";
+            String b = "(" + server.getPaxos().getBallotNum()[0] + ", " + server.getPaxos().getBallotNum()[1] + ")";
+            System.out.println(">> ----------------- RecB : " + recB +"| me : " + b);
             Response response = Protocol.sendAccept(request.getId(), server.getHost(), server.getPaxos());
             sendResponse(response, request.getSender());
         }
     }
 
     private void doAccept() throws IOException {
+        System.out.println("************* : " + server.getPaxos().getBallotNum()[0]);
         server.newAccept(this.response.getPaxos());
     }
 
     private void doDecide() {
         // TODO add Block to blockchain
+        System.out.println(">>>>>>>>>>>>> " + this.server.getPaxos().getAcceptVal());
+        System.out.println("<<<<<<<<<<<<< " + this.server.getPaxos().getClientVal());
         this.server.getBlockChain().addBlock(this.server.getPaxos().getAcceptVal());
+
+        String blockchainJson = new GsonBuilder().setPrettyPrinting().create().toJson(this.server.getBlockChain());
+        System.out.println(blockchainJson);
     }
 
     private void sendBalance() throws IOException {
@@ -157,10 +167,12 @@ public class ServerHandler extends Thread {
 
     private void doTransaction() throws IOException {
         // do propose the value if server is leader
-        if (server.getLeader() != null && this.server.getHost().getId() == server.getLeader().getId()){
-            // i'm the leader
+        boolean doMining =  server.getLeader() == null || (server.getLeader() != null && this.server.getHost().getId() == server.getLeader().getId());
+        if (doMining){
+            // i'm the leader or no leader defined
             if(server.getTransactions().size() == 2) {
                 Block block = this.server.getBlockChain().newBlock(this.server.getTransactions());
+                System.out.println("******************************** " + block);
                 this.server.getPaxos().setClientVal(block);
                 Request request = Protocol.sendPropose(this.server.getHost(), this.server.getPaxos());
                 this.server.broadcastRequest(request);
@@ -178,6 +190,7 @@ public class ServerHandler extends Thread {
         byte[] buf = objectToByte(response);
         DatagramPacket packet = new DatagramPacket(buf, buf.length, receiver.getAddress(), receiver.getPort());
         server.sendPacket(packet);
-        System.out.println("Response " + response.getType() + " has been sent ...");
+
+        System.out.println("Response " + Global.type(response.getType()) + " has been sent "+ receiver);
     }
 }

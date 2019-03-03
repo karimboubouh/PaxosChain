@@ -43,10 +43,10 @@ public class Request implements Serializable {
                 this.paxos = paxos.prepareMessage();
                 break;
             case Protocol.PROPOSE:
-                this.paxos.proposeMessage();
+                this.paxos = paxos.proposeMessage();
                 break;
             case Protocol.DECIDE:
-                this.paxos.decideMessage();
+                this.paxos = paxos.decideMessage();
                 break;
             default:
                 System.out.println("Wrong Paxos message !");

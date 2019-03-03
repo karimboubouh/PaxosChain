@@ -1,10 +1,11 @@
 package core;
 
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Block {
+public class Block implements Serializable {
 
     private  int term;
     private static int counter=0;
@@ -77,5 +78,12 @@ public class Block {
         return calculatedhash;
     }
 
+    @Override
+    public String toString() {
+        return "Block{" +
+                "term=" + term +
+                ", nonce='" + nonce + '\'' +
+                '}';
+    }
 }
 	

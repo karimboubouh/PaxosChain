@@ -21,4 +21,28 @@ public class Global {
         return clients;
     }
 
+    public static String type(int t){
+        switch (t){
+            case 1:
+                return "GET_BALANCE";
+            case 2:
+                return "SEND_BALANCE";
+            case 3:
+                return "ADD_TRANSACTION";
+            case 4:
+                return "SEND_TRANSACTION_STATUS";
+            case 5:
+                return "PREPARE";
+            case 6:
+                return "ACK";
+            case 7:
+                return "PROPOSE";
+            case 8:
+                return "ACCEPT";
+            case 9:
+                return "DECIDE";
+        }
+        return "";
+    }
+
 }

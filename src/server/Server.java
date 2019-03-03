@@ -78,7 +78,7 @@ public class Server {
     }
 
     public void start() throws IOException, ClassNotFoundException {
-        System.out.println("Server started\nWaiting for requests ...");
+        System.out.println("Server " + host + " started\nWaiting for requests ...");
         while (true) {
             byte[] buf = new byte[2048];
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
@@ -117,7 +117,6 @@ public class Server {
      * Then send Accept message to all
      */
     public void newAck(Paxos receivedPaxos) throws IOException {
-//        int[] b = receivedPaxos.getBallotNum();
         int[] b = this.paxos.getBallotNum();
         Block val = this.paxos.getClientVal();
         if (acks.containsKey(b)) {
@@ -127,14 +126,9 @@ public class Server {
             p.add(receivedPaxos);
             acks.put(b, p);
         }
-        System.out.println("i'm here ...");
-        System.out.println(acks);
+        // TODO check majority for 2 or 3 servers in ack phase
         System.out.println("> " + acks.size() + " ACK : " + acks.get(b).size() + "(" + b[0] + ", " + b[1] + ") | Majority : " + majority);
-
-
         if (acks.get(b).size() >= majority) {
-            System.out.println("MASAKAAA");
-            // to check
             int[] ballot = this.paxos.getBallotNum();
             for (Paxos pax : acks.get(b)) {
                 if (pax.compareAcceptNum(ballot)) {
@@ -147,11 +141,13 @@ public class Server {
             this.paxos.setClientVal(val);
             Request request = Protocol.sendPropose(host, this.paxos);
             broadcastRequest(request);
+            acks.get(b).clear();
         }
     }
 
     public void newAccept(Paxos receivedPaxos) throws IOException {
-        int[] b = receivedPaxos.getBallotNum();
+        //int[] b = receivedPaxos.getBallotNum();
+        int[] b = this.paxos.getBallotNum();
         if (accepts.containsKey(b)) {
             accepts.get(b).add(receivedPaxos);
         } else {
@@ -162,12 +158,13 @@ public class Server {
         if (accepts.get(b).size() >= majority) {
             Request request = Protocol.sendDecide(host, this.paxos);
             broadcastRequest(request);
+            accepts.get(b).clear();
         }
     }
 
 
     public void broadcastRequest(Request request) throws IOException {
-        System.out.println("Broadcast Request " + request.getType() + " to all ...");
+        System.out.println("Broadcast Request " + Global.type(request.getType()) + " to all ...");
         for (Host s : this.servers) {
             sendRequest(request, s);
         }
@@ -178,7 +175,7 @@ public class Server {
         byte[] buf = objectToByte(request);
         DatagramPacket packet = new DatagramPacket(buf, buf.length, server.getAddress(), server.getPort());
         udpSocket.send(packet);
-        System.out.println("Request " + request.getType() + " has been sent to " + server + " ...");
+        System.out.println("Request " + Global.type(request.getType()) + " has been sent to " + server + " ...");
     }
 
 
